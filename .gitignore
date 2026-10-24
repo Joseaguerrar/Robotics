@@ -1,0 +1,86 @@
+
+# Android Studio and Gradle
+**/.gradle/
+**/.kotlin/
+**/build/
+**/.idea/
+**/.cxx/
+**/.externalNativeBuild/
+**/captures/
+**/local.properties
+**/output-metadata.json
+*.iml
+*.hprof
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.venv/
+venv/
+dist/
+*.egg-info/
+
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+config.local.json
+credentials.local.json
+tokens.local.json
+secrets/
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Downloaded models and external runtimes
+/PepperTools/
+/models/
+/downloads/
+/external-tools/
+/third_party/bin/
+/llama.cpp/
+/whisper.cpp/
+*.gguf
+*.safetensors
+ggml-*.bin
+*.onnx
+*.pt
+*.pth
+*.exe
+*.dll
+
+# Private audio recordings
+/recordings/
+/audio/
+/audio-private/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# Android build artifacts
+*.apk
+*.apks
+*.aab
+*.aar
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
