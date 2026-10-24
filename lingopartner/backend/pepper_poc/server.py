@@ -1,0 +1,109 @@
+"""Small HTTP gateway used for independent and joined-day-one tests.
+
+No background telemetry; microphone audio is submitted as complete WAV files.
+"""
+import argparse
+import io
+import json
+import wave
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from .pipeline import LlamaAdapter, MockLLM, MockASR, WhisperAdapter
+
+MAX_JSON = 8192
+MAX_WAV = 16000 * 2 * 15 + 44  # <= 15 seconds of 16 kHz mono PCM16
+
+
+def validate_wav(body: bytes):
+    try:
+        with wave.open(io.BytesIO(body), "rb") as f:
+            if (f.getnchannels(), f.getsampwidth(), f.getframerate(), f.getcomptype()) != (1, 2, 16000, 'NONE'):
+                raise ValueError("Require 16 kHz, mono, signed 16-bit PCM WAV")
+            if f.getnframes() == 0:
+                raise ValueError("Empty audio")
+    except (wave.Error, EOFError) as e:
+        raise ValueError("Invalid WAV: " + str(e)) from e
+
+
+class Handler(BaseHTTPRequestHandler):
+    llm = MockLLM()
+    asr = MockASR()
+    token = ""
+    mode = "mock"
+
+    def send_json(self, code, value):
+        body = json.dumps(value, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == "/health":
+            return self.send_json(200, {"ok": True, "mode": self.mode})
+        return self.send_json(404, {"error": "not found"})
+
+    def do_POST(self):
+        if self.path not in ("/text", "/audio"):
+            return self.send_json(404, {"error": "not found"})
+        if self.token and self.headers.get("X-Session-Token") != self.token:
+            return self.send_json(401, {"error": "wrong or missing session token"})
+        size_limit = MAX_JSON if self.path == "/text" else MAX_WAV
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length < 1 or length > size_limit:
+            return self.send_json(413, {"error": "request empty or too large"})
+        data = self.rfile.read(length)
+        try:
+            if self.path == "/text":
+                obj = json.loads(data)
+                utterance = obj.get("text", "") if isinstance(obj, dict) else ""
+                if not isinstance(utterance, str) or not utterance.strip() or len(utterance) > 1000:
+                    return self.send_json(400, {"error": "text must be 1–1000 characters"})
+            else:
+                validate_wav(data)
+                utterance = self.asr.transcribe(data)
+                if not utterance.strip():
+                    return self.send_json(422, {"error": "no speech recognized"})
+            result = self.llm.generate(utterance)
+            return self.send_json(200, {"transcript": utterance, **result})
+        except (ValueError, json.JSONDecodeError) as exc:
+            return self.send_json(400, {"error": str(exc)})
+        except Exception as exc:
+            # Do not leak local filesystem paths into responses.
+            print(f"[BACKEND ERROR] {type(exc).__name__}: {exc}", flush=True)
+            return self.send_json(502, {"error": "local ASR/LLM failed; see server console"})
+
+
+def main():
+    p = argparse.ArgumentParser(description="Pepper no-cloud trial server")
+    p.add_argument("--host", default="127.0.0.1", help="Use 0.0.0.0 ONLY on trusted local LAN")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--token", default="", help="Set for LAN operation; not production auth")
+    p.add_argument("--live", action="store_true", help="Enable real llama-server and whisper-cli")
+    p.add_argument("--llama-url", default="http://127.0.0.1:8080")
+    p.add_argument("--whisper-exe", default="")
+    p.add_argument("--whisper-model", default="")
+    p.add_argument("--vad-model", default="")
+    args = p.parse_args()
+    if args.host != "127.0.0.1" and not args.token:
+        p.error("--token is mandatory when listening beyond localhost")
+    if args.live:
+        Handler.llm = LlamaAdapter(args.llama_url)
+        Handler.asr = WhisperAdapter(args.whisper_exe, args.whisper_model, args.vad_model)
+        Handler.mode = "live"
+    Handler.token = args.token
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print(f"Ready: http://{args.host}:{args.port}/health  mode={Handler.mode}", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
