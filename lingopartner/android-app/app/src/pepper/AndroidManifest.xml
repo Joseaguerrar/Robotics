@@ -1,0 +1,3 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="com.softbank.hardware.pepper" android:required="true" />
+</manifest>

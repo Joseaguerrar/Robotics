@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+android {
+    compileSdk 30
+    defaultConfig {
+        applicationId 'org.example.pepperpoc'
+        minSdk 23
+        targetSdk 28
+        versionCode 1
+        versionName '0.1-test'
+    }
+    flavorDimensions 'device'
+    productFlavors {
+        pepper { dimension 'device'; applicationIdSuffix '.pepper' }
+        standalone { dimension 'device'; applicationIdSuffix '.standalone' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions { jvmTarget = '1.8' }
+}
+dependencies {
+    pepperImplementation 'com.aldebaran:qisdk:1.7.5'
+    // No Compose, Hilt, cloud SDKs or deprecated Pepper IDE plugin.
+}
